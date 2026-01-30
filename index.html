@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AkayGPT</title>
+
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:Arial,Helvetica,sans-serif;
+  background:#0f0f0f;
+  color:#fff;
+  height:100vh;
+  display:flex;
+  flex-direction:column;
+}
+header{
+  background:#151515;
+  padding:12px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+header b{font-size:18px}
+#menuBtn{font-size:22px;cursor:pointer}
+#menu{
+  position:absolute;
+  top:55px;
+  right:10px;
+  background:#1f1f1f;
+  border-radius:12px;
+  padding:10px;
+  display:none;
+  width:200px;
+}
+#menu button{
+  width:100%;
+  margin:5px 0;
+  padding:10px;
+  background:#0b93f6;
+  border:none;
+  border-radius:10px;
+  color:#fff;
+  font-weight:bold;
+}
+#chat{
+  flex:1;
+  overflow-y:auto;
+  padding:10px;
+}
+.msg{
+  max-width:80%;
+  padding:10px 12px;
+  margin:6px 0;
+  border-radius:14px;
+  line-height:1.4;
+}
+.user{
+  background:#0b93f6;
+  margin-left:auto;
+}
+.bot{
+  background:#2a2a2a;
+}
+#inputBar{
+  display:flex;
+  padding:10px;
+  background:#151515;
+  gap:6px;
+}
+#input{
+  flex:1;
+  padding:10px;
+  border-radius:14px;
+  border:none;
+  outline:none;
+}
+button.action{
+  padding:10px 12px;
+  border-radius:14px;
+  border:none;
+  background:#0b93f6;
+  color:#fff;
+  font-size:16px;
+}
+img{
+  max-width:100%;
+  border-radius:14px;
+  margin:6px 0;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <b>AkayGPT</b>
+  <span id="menuBtn">☰</span>
+</header>
+
+<div id="menu">
+  <button onclick="setLang('tr')">Türkçe</button>
+  <button onclick="setLang('en')">English</button>
+  <button onclick="openSettings()">Ayarlar</button>
+  <button onclick="alert(privacy)">Privacy Policy</button>
+</div>
+
+<div id="chat"></div>
+
+<div id="inputBar">
+  <input id="input" placeholder="Mesaj yaz..." />
+  <button class="action" onclick="send()">➤</button>
+  <button class="action" onclick="voice()">🎤</button>
+  <button class="action" onclick="createImage()">🖼️</button>
+</div>
+
+<script>
+/* ================== AYARLAR ================== */
+const HF_API_KEY = "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"; // <-- BURAYA KEY
+let lang = "tr";
+
+/* ================== PRIVACY ================== */
+const privacy = `
+AkayGPT gizliliğe saygılıdır.
+Mesajlar kaydedilmez.
+Veriler sadece AI cevap üretimi için kullanılır.
+`;
+
+/* ================== UI ================== */
+const chat = document.getElementById("chat");
+document.getElementById("menuBtn").onclick = () => {
+  const m=document.getElementById("menu");
+  m.style.display = m.style.display==="block"?"none":"block";
+};
+
+function add(text,type){
+  const d=document.createElement("div");
+  d.className="msg "+type;
+  d.textContent=text;
+  chat.appendChild(d);
+  d.scrollIntoView();
+}
+
+/* ================== CHAT ================== */
+async function send(){
+  const input=document.getElementById("input");
+  if(!input.value) return;
+  const msg=input.value;
+  input.value="";
+  add(msg,"user");
+
+  const systemPrompt = lang==="tr"
+    ? "Sen AkayGPT'sin. Kibar, net, her soruya cevap ver."
+    : "You are AkayGPT. Be helpful and clear.";
+
+  try{
+    const r = await fetch(
+      "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2",
+      {
+        method:"POST",
+        headers:{
+          "Authorization":"Bearer "+HF_API_KEY,
+          "Content-Type":"application/json"
+        },
+        body:JSON.stringify({
+          inputs: systemPrompt + "\nUser: " + msg
+        })
+      }
+    );
+    const j = await r.json();
+    const text = j[0]?.generated_text || "Cevap alınamadı";
+    add(text,"bot");
+    speak(text);
+  }catch(e){
+    add("Bağlantı hatası","bot");
+  }
+}
+
+/* ================== SESLİ ================== */
+function voice(){
+  if(!("webkitSpeechRecognition" in window)){
+    alert("Sesli giriş desteklenmiyor");
+    return;
+  }
+  const r=new webkitSpeechRecognition();
+  r.lang=lang==="tr"?"tr-TR":"en-US";
+  r.start();
+  r.onresult=e=>{
+    document.getElementById("input").value=e.results[0][0].transcript;
+  };
+}
+
+function speak(t){
+  const u=new SpeechSynthesisUtterance(t);
+  u.lang=lang==="tr"?"tr-TR":"en-US";
+  speechSynthesis.speak(u);
+}
+
+/* ================== RESİM ================== */
+async function createImage(){
+  const p = prompt("Resim açıklaması:");
+  if(!p) return;
+  add("Resim oluşturuluyor...","bot");
+  try{
+    const r = await fetch(
+      "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2",
+      {
+        method:"POST",
+        headers:{
+          "Authorization":"Bearer "+HF_API_KEY,
+          "Content-Type":"application/json"
+        },
+        body:JSON.stringify({inputs:p})
+      }
+    );
+    const blob = await r.blob();
+    const img=document.createElement("img");
+    img.src=URL.createObjectURL(blob);
+    chat.appendChild(img);
+    img.scrollIntoView();
+  }catch(e){
+    add("Resim oluşturulamadı","bot");
+  }
+}
+
+/* ================== AYAR ================== */
+function setLang(l){
+  lang=l;
+  alert("Dil değiştirildi");
+}
+function openSettings(){
+  alert("Yakında: tema, hız, ses ayarları");
+}
+</script>
+
+</body>
+  </html>
